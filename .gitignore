@@ -1,5 +1,19 @@
-node_modules/ 
-.env 
-dist/ 
-build/ 
-PILLPAL-Backend/node_modules/ 
+# dependencies
+node_modules/
+PILLPAL-Backend/node_modules/
+
+# env files
+.env
+PILLPAL-Backend/.env
+
+# IDE/editor
+.idea/
+.vscode/
+
+# build output
+dist/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
