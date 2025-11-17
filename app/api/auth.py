@@ -4,7 +4,6 @@ import jwt, datetime, os
 from ..db import get_db
 
 auth_bp = Blueprint('auth', __name__)
-
 JWT_SECRET = os.getenv("JWT_SECRET", "super_secret_key123")
 
 @auth_bp.route("/api/auth/register", methods=["POST"])
@@ -12,8 +11,9 @@ def register():
     data = request.json
     email = data.get("email")
     password = data.get("password")
+    full_name = data.get("full_name")
 
-    if not email or not password:
+    if not email or not password or not full_name:
         return jsonify({"error": "Missing fields"}), 400
 
     try:
@@ -22,8 +22,26 @@ def register():
 
         hashed = generate_password_hash(password)
 
-        cursor.execute("INSERT INTO users (email, password_hash) VALUES (%s, %s)", (email, hashed))
+        cursor.execute("""
+            INSERT INTO users (email, password_hash)
+            VALUES (%s, %s)
+        """, (email, hashed))
+
+        user_id = cursor.lastrowid
+
+        cursor.execute("""
+            INSERT INTO user_profiles (user_id, full_name)
+            VALUES (%s, %s)
+        """, (user_id, full_name))
+
+        cursor.execute("""
+            INSERT INTO notification_settings (user_id)
+            VALUES (%s)
+        """, (user_id,))
+
         conn.commit()
+        cursor.close()
+        conn.close()
 
         return jsonify({"message": "User created"}), 201
 
@@ -43,6 +61,7 @@ def login():
 
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
+
     cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
     user = cursor.fetchone()
 
@@ -55,4 +74,42 @@ def login():
         algorithm="HS256"
     )
 
+    cursor.close()
+    conn.close()
+
     return jsonify({"token": token})
+
+
+@auth_bp.route("/api/auth/me", methods=["GET"])
+def get_profile():
+    token = request.headers.get("Authorization")
+    if not token:
+        return jsonify({"error": "Missing Authorization header"}), 401
+
+    try:
+        token = token.replace("Bearer ", "")
+        decoded = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        user_id = decoded["user_id"]
+
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("""
+            SELECT u.user_id, u.email, p.full_name,
+                   n.sound_enabled, n.vibration_enabled, n.dyslexia_font
+            FROM users u
+            LEFT JOIN user_profiles p ON u.user_id = p.user_id
+            LEFT JOIN notification_settings n ON u.user_id = n.user_id
+            WHERE u.user_id = %s
+        """, (user_id,))
+
+        profile = cursor.fetchone()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify(profile)
+
+    except Exception as e:
+        print("Token decode error:", e)
+        return jsonify({"error": "Invalid token"}), 401
