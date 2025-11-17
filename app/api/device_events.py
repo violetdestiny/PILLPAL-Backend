@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from .db import get_db
+from app.db import get_db
 
 device_events_bp = Blueprint('device_events', __name__)
 

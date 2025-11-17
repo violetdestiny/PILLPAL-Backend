@@ -5,23 +5,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-def get_connection():
-    return mysql.connector.connect(
-        host=os.getenv("DB_HOST", "localhost"),
-        user=os.getenv("DB_USER", "root"),
-        password=os.getenv("DB_PASSWORD", ""),
-        database=os.getenv("DB_NAME", "pillpal_db"),
-    )
-
-def test_connection():
+def get_db():
     try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1")
-        cursor.fetchone()
-        cursor.close()
-        conn.close()
-        return True
+        conn = mysql.connector.connect(
+            host=os.getenv("DB_HOST", "localhost"),
+            user=os.getenv("DB_USER", "root"),
+            password=os.getenv("DB_PASSWORD", ""),
+            database=os.getenv("DB_NAME", "pillpal_db"),
+            port=os.getenv("DB_PORT", 3307) # Guys pls change this, my port is 3307 yours is 3306
+        )
+        return conn
     except Error as e:
         print("DB connection error:", e)
-        return False
+        return None
