@@ -1,6 +1,5 @@
 from flask import Flask
 from .db import get_db
-from .api.device_events import device_events_bp
 
 def create_app():
     app = Flask(__name__)
@@ -8,10 +7,13 @@ def create_app():
     @app.route("/health")
     def health():
         try:
-            get_db()
+            conn = get_db()
+            conn.cursor()
             return {"db": True, "status": "ok"}
-        except:
+        except Exception:
             return {"db": False, "status": "db_error"}
 
-    app.register_blueprint(device_events_bp)
+    from .api.events import api_events
+    app.register_blueprint(api_events, url_prefix="/api")
+
     return app
