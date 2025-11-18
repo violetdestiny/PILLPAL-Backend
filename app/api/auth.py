@@ -6,48 +6,45 @@ from ..db import get_db
 auth_bp = Blueprint('auth', __name__)
 JWT_SECRET = os.getenv("JWT_SECRET", "super_secret_key123")
 
-@auth_bp.route("/api/auth/register", methods=["POST"])
+
+@auth_bp.route('/api/auth/register', methods=['POST'])
 def register():
     data = request.json
-    email = data.get("email")
-    password = data.get("password")
-    full_name = data.get("full_name")
+    email = data.get('email')
+    password = data.get('password')
+    full_name = data.get('full_name')
+    birthday = data.get('birthday')
 
-    if not email or not password or not full_name:
+    if not email or not password or not full_name or not birthday:
         return jsonify({"error": "Missing fields"}), 400
 
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
+    conn = get_db()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+    cur = conn.cursor(dictionary=True)
 
-        hashed = generate_password_hash(password)
+    cur.execute("SELECT * FROM users WHERE email = %s", (email,))
+    if cur.fetchone():
+        return jsonify({"error": "Email already exists"}), 409
 
-        cursor.execute("""
-            INSERT INTO users (email, password_hash)
-            VALUES (%s, %s)
-        """, (email, hashed))
+    hashed_pw = generate_password_hash(password)
 
-        user_id = cursor.lastrowid
+    cur.execute(
+        "INSERT INTO users (email, password_hash, full_name, birthday) VALUES (%s, %s, %s, STR_TO_DATE(%s,'%m/%d/%Y'))",
+        (email, hashed_pw, full_name, birthday)
+    )
+    conn.commit()
 
-        cursor.execute("""
-            INSERT INTO user_profiles (user_id, full_name)
-            VALUES (%s, %s)
-        """, (user_id, full_name))
+    cur.close()
+    conn.close()
 
-        cursor.execute("""
-            INSERT INTO notification_settings (user_id)
-            VALUES (%s)
-        """, (user_id,))
+    token = jwt.encode(
+        {"email": email, "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=24)},
+        JWT_SECRET,
+        algorithm="HS256"
+    )
 
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        return jsonify({"message": "User created"}), 201
-
-    except Exception as e:
-        print("DB Error:", e)
-        return jsonify({"error": "Email may already exist"}), 400
+    return jsonify({"token": token}), 201
 
 
 @auth_bp.route("/api/auth/login", methods=["POST"])

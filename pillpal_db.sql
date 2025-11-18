@@ -265,3 +265,9 @@ DROP COLUMN timezone;
 all new users are going to get this automatically */
 INSERT INTO notification_settings (user_id) VALUES (1);
 INSERT INTO notification_settings (user_id) VALUES (2);
+
+/* 18/11/2025 - RUN THESE COMMANDS TOO*/
+
+ALTER TABLE users
+ADD COLUMN full_name VARCHAR(100) AFTER email,
+ADD COLUMN birthday DATE AFTER full_name;
