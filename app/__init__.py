@@ -1,7 +1,8 @@
 from flask import Flask
 from .db import get_db
 from .api.device_events import device_events_bp
-from .api.auth import auth_bp, med_bp
+from .api.auth import auth_bp
+from .api.medications import med_bp
 
 def create_app():
     app = Flask(__name__)

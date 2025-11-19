@@ -86,3 +86,60 @@ def get_medications(current_user):
     conn.close()
 
     return jsonify(results)
+
+@med_bp.route("/api/medications/<int:med_id>", methods=["GET"])
+@token_required
+def get_medication_by_id(current_user, med_id):
+    user_id = current_user["user_id"]
+    conn = get_db()
+    cur = conn.cursor(dictionary=True)
+
+    # get main medication row
+    cur.execute("""
+        SELECT med_id, name, notes, start_date AS active_start_date,
+               end_date AS active_end_date
+        FROM medications
+        WHERE med_id = %s AND user_id = %s
+    """, (med_id, user_id))
+
+    med = cur.fetchone()
+    if not med:
+        return jsonify({"error": "Medication not found"}), 404
+
+    # get schedule rule
+    cur.execute("""
+        SELECT rule_id, repeat_type, day_mask
+        FROM med_schedule_rules
+        WHERE med_id = %s
+        LIMIT 1
+    """, (med_id,))
+    rule = cur.fetchone()
+
+    # get times
+    times = []
+    if rule:
+        cur.execute("""
+            SELECT hhmm FROM med_times
+            WHERE rule_id = %s
+            ORDER BY sort_order
+        """, (rule["rule_id"],))
+        times = [row["hhmm"] for row in cur.fetchall()]
+
+    result = {
+        "med_id": med["med_id"],
+        "name": med["name"],
+        "notes": med["notes"],
+        "active_start_date": str(med["active_start_date"]),
+        "active_end_date": str(med["active_end_date"]) if med["active_end_date"] else None,
+        "schedule": {
+            "repeat_type": rule["repeat_type"] if rule else None,
+            "day_mask": rule["day_mask"] if rule else None,
+            "times": times,
+            "custom_start": None,
+            "custom_end": None
+        }
+    }
+
+    cur.close()
+    conn.close()
+    return jsonify(result)
