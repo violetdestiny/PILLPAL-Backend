@@ -271,3 +271,7 @@ INSERT INTO notification_settings (user_id) VALUES (2);
 ALTER TABLE users
 ADD COLUMN full_name VARCHAR(100) AFTER email,
 ADD COLUMN birthday DATE AFTER full_name;
+
+ALTER TABLE users
+DROP COLUMN nickname,
+DROP COLUMN date_joined;

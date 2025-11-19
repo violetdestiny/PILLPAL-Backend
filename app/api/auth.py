@@ -30,21 +30,25 @@ def register():
     hashed_pw = generate_password_hash(password)
 
     cur.execute(
-        "INSERT INTO users (email, password_hash, full_name, birthday) VALUES (%s, %s, %s, STR_TO_DATE(%s,'%m/%d/%Y'))",
+        "INSERT INTO users (email, password_hash, full_name, birthday) "
+        "VALUES (%s, %s, %s, STR_TO_DATE(%s,'%d/%m/%Y'))",
         (email, hashed_pw, full_name, birthday)
     )
     conn.commit()
+
+    new_user_id = cur.lastrowid
 
     cur.close()
     conn.close()
 
     token = jwt.encode(
-        {"email": email, "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=24)},
+        {"user_id": new_user_id, "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=24)},
         JWT_SECRET,
         algorithm="HS256"
     )
 
     return jsonify({"token": token}), 201
+
 
 
 @auth_bp.route("/api/auth/login", methods=["POST"])
@@ -74,7 +78,7 @@ def login():
     cursor.close()
     conn.close()
 
-    return jsonify({"token": token})
+    return jsonify({"token": token}), 201
 
 
 @auth_bp.route("/api/auth/me", methods=["GET"])
@@ -92,12 +96,10 @@ def get_profile():
         cursor = conn.cursor(dictionary=True)
 
         cursor.execute("""
-            SELECT u.user_id, u.email, p.full_name,
-                   n.sound_enabled, n.vibration_enabled, n.dyslexia_font
-            FROM users u
-            LEFT JOIN user_profiles p ON u.user_id = p.user_id
-            LEFT JOIN notification_settings n ON u.user_id = n.user_id
-            WHERE u.user_id = %s
+            SELECT user_id, email, full_name,
+                   DATE_FORMAT(birthday, '%d/%m/%Y') AS birthday
+            FROM users
+            WHERE user_id = %s
         """, (user_id,))
 
         profile = cursor.fetchone()
