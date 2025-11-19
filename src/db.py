@@ -1,18 +1,22 @@
+import os
+from dotenv import load_dotenv
 import mysql.connector
 from mysql.connector import Error
 
+load_dotenv()
+
 DB_CONFIG = {
-    "host": "172.20.10.4",
-    "user": "pillpal",
-    "password": "Pillpal123",
-    "database": "pillpal_db",
-    "port": 3306
+    "host": os.getenv("DB_HOST"),
+    "user": os.getenv("DB_USER"),
+    "password": os.getenv("DB_PASS"),
+    "database": os.getenv("DB_NAME"),
+    "port": int(os.getenv("DB_PORT"))
 }
 
 def get_db():
     try:
-        connection = mysql.connector.connect(**DB_CONFIG)
-        return connection
+        conn = mysql.connector.connect(**DB_CONFIG)
+        return conn
     except Error as e:
         print(f"DB Connection Error: {e}")
         return None
