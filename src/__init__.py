@@ -3,6 +3,8 @@ from .db import get_db
 
 def create_app():
     app = Flask(__name__)
+    app.config["DEBUG"] = True
+    app.config["PROPAGATE_EXCEPTIONS"] = True
 
     @app.route("/health")
     def health():

@@ -1,26 +1,36 @@
 from flask import Blueprint, request, jsonify
 from src.db import get_db
-import json
 
 api_events = Blueprint("api_events", __name__)
 
-@api_events.route("/events", methods=["POST"])
-def store_event():
-    data = request.json
+
+@api_events.route("/medications", methods=["GET"])
+def get_medications():
+    user_id = request.args.get("user_id")
+
+    if not user_id:
+        return jsonify({"error": "user_id is required"}), 400
+
     conn = get_db()
     cursor = conn.cursor()
 
-    sql = """
-        INSERT INTO device_events (device_id, event_type, event_source, meta)
-        VALUES (%s, %s, %s, %s)
-    """
+    cursor.execute(
+        """
+        SELECT med_id, name, notes
+        FROM medications
+        WHERE user_id = %s
+        """,
+        (user_id,)
+    )
 
-    cursor.execute(sql, (
-        data.get("device_id"),
-        data.get("event_type"),
-        "device",
-        json.dumps(data),
-    ))
+    rows = cursor.fetchall()
 
-    conn.commit()
-    return jsonify({"status": "saved"}), 201
+    medications = []
+    for med_id, name, notes in rows:
+        medications.append({
+            "med_id": med_id,
+            "name": name,
+            "notes": notes
+        })
+
+    return jsonify(medications), 200

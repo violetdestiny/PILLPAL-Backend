@@ -88,3 +88,39 @@ def login():
         "email": email,
         "timezone": timezone
     }), 200
+
+@auth_bp.route("/me", methods=["GET"])
+def me():
+    user_id = request.args.get("user_id")
+
+    if not user_id:
+        return jsonify({"error": "user_id is required"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT users.user_id, user_profiles.full_name,
+               user_profiles.username, users.email, user_profiles.timezone
+        FROM users
+        JOIN user_profiles ON users.user_id = user_profiles.user_id
+        WHERE users.user_id=%s
+        """,
+        (user_id,)
+    )
+
+    user = cursor.fetchone()
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    user_id, full_name, username, email, timezone = user
+
+    return jsonify({
+        "user_id": user_id,
+        "full_name": full_name,
+        "username": username,
+        "email": email,
+        "timezone": timezone
+    }), 200
