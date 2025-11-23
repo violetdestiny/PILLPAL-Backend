@@ -121,7 +121,7 @@ The app uses **Retrofit + Gson** to parse backend responses.
 
 #  System Architecture
 
-(Your diagram preserved)
+
 
 <img width="614" height="509" alt="SysArchitecture" src="https://github.com/user-attachments/assets/4d544017-16ed-4c65-b47c-aada8f05e7a6" />
 
@@ -275,6 +275,8 @@ This backend currently supports:
 * Full MQTT → DB adherence logging
 * Device pairing and status tracking
 * Complete CRUD for medications
+* Full box implementation.
+* https://cad.onshape.com/documents/ab0ab6e78c7dc02038fa95e0/w/72d464fa7c6e7aad1d8f76f9/e/c431fd5f781bbfc2fce61794?renderMode=0&uiState=6922f2534c34db92d47210fa
 * Notifications + pill reminders
 * IoT → App real-time sync
 * JWT authentication upgrade
