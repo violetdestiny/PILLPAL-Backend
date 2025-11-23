@@ -21,10 +21,10 @@
 
 **Team Pixel Health**
 
-* Sofia — Backend, Database, Hardware
-* Iker — IoT Hardware, Connectivity
-* Favour — UX/UI Design
-* Ikram — Frontend + Device Integration
+* Sofia - Backend, Database, Hardware
+* Iker - Backend, IoT Hardware, Connectivity
+* Favour - Fronted, UX/UI Design, Hardware
+* Ikram - Frontend, Device Integration, Hardware
 
 ---
 
@@ -39,10 +39,10 @@ This backend ensures the entire PillPal ecosystem syncs reliably, even when the 
 
 | Component                | Tech                     |
 | ------------------------ | ------------------------ |
-| **Runtime**              | Node.js (Express)        |
-| **Database**             | MySQL (mysql2 driver)    |
+| **Runtime**              | Python 3 + Flask         |
+| **Database**             | MySQL                    |
 | **Messaging**            | MQTT (Mosquitto broker)  |
-| **Auth**                 | JWT (via `/auth` routes) |
+| **Auth**                 | JWT (PyJWT)              |
 | **Environment**          | dotenv                   |
 | **Cross-Origin Support** | CORS middleware          |
 
