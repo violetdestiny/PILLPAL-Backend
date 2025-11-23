@@ -15,10 +15,14 @@ def create_app():
         except Exception:
             return {"db": False, "status": "db_error"}
 
+    from .api.auth import auth_bp
+    app.register_blueprint(auth_bp, url_prefix="/api/auth")
+
+    from .api.medications import medications_bp
+    app.register_blueprint(medications_bp, url_prefix="/api")
+
     from .api.events import api_events
     app.register_blueprint(api_events, url_prefix="/api")
 
-    from .api.auth import auth_bp
-    app.register_blueprint(auth_bp, url_prefix="/api/auth")
 
     return app

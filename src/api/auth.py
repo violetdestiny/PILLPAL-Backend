@@ -25,19 +25,18 @@ def register():
     if cursor.fetchone():
         return jsonify({"error": "Email already registered"}), 400
 
-    hashed = generate_password_hash(password)
-
+    hashed_pw = generate_password_hash(password)
 
     cursor.execute(
         "INSERT INTO users (email, password_hash) VALUES (%s, %s)",
-        (email, hashed)
+        (email, hashed_pw)
     )
     conn.commit()
 
     user_id = cursor.lastrowid
 
     cursor.execute(
-        """INSERT INTO user_profiles (user_id, full_name, username, timezone, birth_date) 
+        """INSERT INTO user_profiles (user_id, full_name, username, timezone, birth_date)
            VALUES (%s, %s, %s, %s, %s)""",
         (user_id, full_name, username, timezone, birth_date)
     )
@@ -45,12 +44,11 @@ def register():
 
     return jsonify({
         "user_id": user_id,
+        "email": email,
         "full_name": full_name,
         "username": username,
-        "email": email,
         "timezone": timezone
     }), 201
-
 
 
 @auth_bp.route("/login", methods=["POST"])
@@ -64,9 +62,9 @@ def login():
     cursor = conn.cursor()
 
     cursor.execute(
-        """SELECT users.user_id, users.password_hash, user_profiles.full_name, 
+        """SELECT users.user_id, users.password_hash, user_profiles.full_name,
                   user_profiles.username, user_profiles.timezone
-           FROM users 
+           FROM users
            JOIN user_profiles ON users.user_id = user_profiles.user_id
            WHERE email=%s""",
         (email,)
@@ -83,44 +81,13 @@ def login():
 
     return jsonify({
         "user_id": user_id,
+        "email": email,
         "full_name": full_name,
         "username": username,
-        "email": email,
         "timezone": timezone
     }), 200
+
 
 @auth_bp.route("/me", methods=["GET"])
 def me():
-    user_id = request.args.get("user_id")
-
-    if not user_id:
-        return jsonify({"error": "user_id is required"}), 400
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        SELECT users.user_id, user_profiles.full_name,
-               user_profiles.username, users.email, user_profiles.timezone
-        FROM users
-        JOIN user_profiles ON users.user_id = user_profiles.user_id
-        WHERE users.user_id=%s
-        """,
-        (user_id,)
-    )
-
-    user = cursor.fetchone()
-
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-
-    user_id, full_name, username, email, timezone = user
-
-    return jsonify({
-        "user_id": user_id,
-        "full_name": full_name,
-        "username": username,
-        "email": email,
-        "timezone": timezone
-    }), 200
+    return jsonify({"error": "Not implemented (JWT removed)"}), 200
