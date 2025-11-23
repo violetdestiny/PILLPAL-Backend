@@ -32,10 +32,10 @@
 The **PillPal Backend** is the cloud backbone of the entire PillPal ecosystem.
 It connects:
 
-✔ The **Android mobile app** (login, registration, medications)
-✔ The **IoT pillbox hardware** (via MQTT)
-✔ The **MySQL database** hosted on AWS RDS
-✔ The **secure web server** on AWS EC2 running Apache + WSGI
+The **Android mobile app** (login, registration, medications)
+ The **IoT pillbox hardware** (via MQTT)
+ The **MySQL database** hosted on AWS RDS
+ The **secure web server** on AWS EC2 running Apache + WSGI
 
 This backend ensures reliable syncing of:
 
@@ -110,9 +110,9 @@ COMING IN CA3:
 
 The mobile app communicates with:
 
-✔ `/auth/login`
-✔ `/auth/register`
-✔ `/medications` GET + POST
+ `/auth/login`
+ `/auth/register`
+ `/medications` GET + POST
 
 All through **HTTPS** via `pillpal.space`
 The app uses **Retrofit + Gson** to parse backend responses.
@@ -127,7 +127,7 @@ The app uses **Retrofit + Gson** to parse backend responses.
 
 ---
 
-# 🔌 MQTT Overview
+#  MQTT Overview
 
 ### MQTT Broker
 
