@@ -1,113 +1,149 @@
 # PillPal — Backend API
 
-![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=node.js&logoColor=white)
-![Express](https://img.shields.io/badge/Express.js-000000?style=for-the-badge&logo=express&logoColor=white)
-![MySQL](https://img.shields.io/badge/MySQL-4479A1?style=for-the-badge&logo=mysql&logoColor=white)
-![MQTT](https://img.shields.io/badge/MQTT-660066?style=for-the-badge&logo=mqtt&logoColor=white)
-![JWT](https://img.shields.io/badge/JWT-000000?style=for-the-badge&logo=jsonwebtokens&logoColor=white)
-![dotenv](https://img.shields.io/badge/dotenv-ECD53F?style=for-the-badge&logo=dotenv&logoColor=black)
-![CORS](https://img.shields.io/badge/CORS-FF8800?style=for-the-badge)
-![bcryptjs](https://img.shields.io/badge/bcryptjs-0086FF?style=for-the-badge)
-![nodemon](https://img.shields.io/badge/nodemon-76D04B?style=for-the-badge&logo=nodemon&logoColor=white)
+
+![Python](https://img.shields.io/badge/Python-3670A0?style=for-the-badge\&logo=python\&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-000000?style=for-the-badge\&logo=flask\&logoColor=white)
+![MySQL](https://img.shields.io/badge/MySQL-4479A1?style=for-the-badge\&logo=mysql\&logoColor=white)
+![Apache](https://img.shields.io/badge/Apache-D22128?style=for-the-badge\&logo=apache\&logoColor=white)
+![WSGI](https://img.shields.io/badge/WSGI-444444?style=for-the-badge)
+![MQTT](https://img.shields.io/badge/MQTT-660066?style=for-the-badge\&logo=mqtt\&logoColor=white)
+![paho-mqtt](https://img.shields.io/badge/paho--mqtt-1E90FF?style=for-the-badge)
+![SSL](https://img.shields.io/badge/SSL%20Certbot-3A3A3A?style=for-the-badge\&logo=letsencrypt)
 
 
-| Component                        | Link                                                                                                   |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| **Frontend (Android/Kotlin)** | [https://github.com/violetdestiny/PILLPAL-Frontend](https://github.com/f4eriebambi/pillpalMobile) |
+
+### Related Repositories
+
+| Component                     | Link                                                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **Frontend (Android/Kotlin)** | [https://github.com/f4eriebambi/pillpalMobile](https://github.com/f4eriebambi/pillpalMobile)           |
 | **Hardware (Pi Zero)**        | [https://github.com/violetdestiny/PILLPAL-Hardware](https://github.com/violetdestiny/PILLPAL-Hardware) |
 
 ---
 
-## Contributors
-
-**Team Pixel Health**
-
-* Sofia — Backend, Database, Hardware
-* Iker — IoT Hardware, Connectivity
-* Favour — UX/UI Design
+**Team Pixel Health** 
+* Sofia — Backend, Database, Hardware 
+* Iker — IoT Hardware, Connectivity 
+* Favour — UX/UI Design 
 * Ikram — Frontend + Device Integration
 
+#  Overview
+
+The **PillPal Backend** is the cloud backbone of the entire PillPal ecosystem.
+It connects:
+
+The **Android mobile app** (login, registration, medications)
+ The **IoT pillbox hardware** (via MQTT)
+ The **MySQL database** hosted on AWS RDS
+ The **secure web server** on AWS EC2 running Apache + WSGI
+
+This backend ensures reliable syncing of:
+
+* Users
+* Medication schedules
+* Daily reminders
+* IoT device events
+* Adherence tracking
+
+Everything is encrypted through **HTTPS + SSL certbot**.
+
 ---
 
-The **PillPal Backend** is the central system that connects the PillPal **mobile app**, **IoT pillbox hardware**, and **cloud database**.
-It provides REST API endpoints for the app, listens to **MQTT events** from the device, and stores all medication schedules and adherence history in MySQL.
+#  Technologies Used
 
-This backend ensures the entire PillPal ecosystem syncs reliably, even when the hardware or app goes offline.
-
----
-
-##  Technologies & Stack
-
-| Component                | Tech                     |
-| ------------------------ | ------------------------ |
-| **Runtime**              | Node.js (Express)        |
-| **Database**             | MySQL (mysql2 driver)    |
-| **Messaging**            | MQTT (Mosquitto broker)  |
-| **Auth**                 | JWT (via `/auth` routes) |
-| **Environment**          | dotenv                   |
-| **Cross-Origin Support** | CORS middleware          |
+| Layer                  | Technology                                 |
+| ---------------------- | ------------------------------------------ |
+| **Web Server**         | Apache2 + WSGI                             |
+| **Backend Runtime**    | Python 3                                   |
+| **Framework**          | Flask                                      |
+| **Database**           | MySQL on Amazon RDS                        |
+| **MQTT Messaging**     | Mosquitto broker + Python paho-mqtt client |
+| **Auth**               | Token-based (simple token storage)         |
+| **Android Networking** | Retrofit, OkHttp                           |
+| **Deployment**         | AWS EC2, Route 53, Certbot SSL             |
 
 ---
 
-## What This Backend Does
+#  What This Backend Does
 
-###  **1. Provides REST API for the mobile app**
+## **Authentication API**
 
-* User authentication
-* CRUD for medications
-* Scheduling endpoints
-* Retrieve dose history
-* Device pairing
+Endpoints under `/auth/`:
 
-### **2. Listens to MQTT events from the pillbox**
+* `/register` — Creates a new user
+* `/login` — Returns user + simple session token
+* Input validation
+* Database storage via parameterized SQL
 
-* `alert_started`
-* `pill_taken` (mapped -> `ack_taken`)
-* Any additional device telemetry (battery, lid state, etc.)
+##  **Medication Management API**
 
-And writes them into:
+Endpoints under `/medications/`:
 
-* `dose_events`
-* `dose_instances`
+* `GET /medications?user_id=X` — Returns all medications + schedule + times
+* `POST /medications` — Creates a new medication, schedule rule, and daily times
 
-### **3. Links devices → users → scheduled medication**
-
-Using the ERD logic:
+This is tightly integrated with the MySQL schema:
 
 ```
-device -> device_pairings -> user -> medications -> dose_instances -> dose_events
+medications
+med_schedule_rules
+med_times
 ```
 
-### **4. Maintains accurate adherence logs**
+## 3️ **MQTT Device Event Handling**
 
-* Updates dose instance status automatically
-* Stores full event metadata (timestamps, raw JSON)
+The backend listens to MQTT messages from the Raspberry Pi:
+
+* `pillpal/device/<device_id>` topics
+* Events such as:
+
+  * `pill_taken`
+  * `alert_started`
+  * telemetries, timestamps, battery, etc.
+
+COMING IN CA3:
+
+* Mapping MQTT → schedule events
+* Updating dose_instances
+
+## 4️ **Android App Integration**
+
+The mobile app communicates with:
+
+ `/auth/login`
+ `/auth/register`
+ `/medications` GET + POST
+
+All through **HTTPS** via `pillpal.space`
+The app uses **Retrofit + Gson** to parse backend responses.
 
 ---
 
-## System Architecture
+#  System Architecture
+
+(Your diagram preserved)
 
 <img width="614" height="509" alt="SysArchitecture" src="https://github.com/user-attachments/assets/4d544017-16ed-4c65-b47c-aada8f05e7a6" />
 
 ---
 
-## MQTT Event Handling
+#  MQTT Overview
 
 ### MQTT Broker
 
-Defined in  `.env`:
+Running on the Raspberry Pi or cloud instance:
 
 ```
-MQTT_BROKER=mqtt://127.0.0.1:1883
+mqtt://127.0.0.1:1883
 ```
 
 ### Subscribed Topics
 
 ```
-pillpal/device/#
+pillpal/device/#       # All IoT messages
 ```
 
-### Example incoming payload
+### Example MQTT Event
 
 ```json
 {
@@ -117,96 +153,131 @@ pillpal/device/#
 }
 ```
 
-### Event Mapping Logic
+### Mapping Logic (CA3)
 
-| Device Event | Mapped Database event_type |
-| ------------ | -------------------------- |
-| `pill_taken` | `ack_taken`                |
-| (default)    | `alert_started`            |
-
-Events update:
-
-* `dose_events`
-* `dose_instances.status`
+| Device Event | Stored As       |
+| ------------ | --------------- |
+| `pill_taken` | `ack_taken`     |
+| default      | `alert_started` |
 
 ---
 
-## Database Integration
+#  Database (AWS RDS MySQL)
 
-The backend connects using:
 <img width="856" height="517" alt="3NF_ERD" src="https://github.com/user-attachments/assets/26ccd93c-d42d-49c0-8d28-d52faf84580b" />
 
-```js
-mysql.createConnection({
-  host: process.env.MYSQL_HOST,
-  user: process.env.MYSQL_USER,
-  password: process.env.MYSQL_PASSWORD,
-  database: process.env.MYSQL_DATABASE
-})
-```
+Secure RDS configuration:
 
-If the device publishes an event, the backend:
-
-1. Finds the correct device
-2. Finds the latest dose instance tied to the user
-3. Inserts a row into `dose_events`
-4. Updates the dose instance status
+* Strong password
+* Private network
+* SSL enforced
+* Parameterized queries
+* Automatic backups
 
 ---
 
-## Environment Variables
+#  Environment Variables
 
-Create an `.env` file in the backend folder:
+Create `.env` inside the backend:
 
 ```
-# MySQL
-MYSQL_HOST=localhost
-MYSQL_USER=root
-MYSQL_PASSWORD=yourpassword
-MYSQL_DATABASE=pillpal
-MYSQL_PORT=3306
+DB_HOST=< RDS endpoint>
+DB_USER=<user>
+DB_PASSWORD=<password>
+DB_NAME=database
 
-# MQTT
 MQTT_BROKER=mqtt://127.0.0.1:1883
-
-# Server
-PORT=5000
-JWT_SECRET=supersecret
 ```
 
 ---
 
-## Installation & Setup
+#  Deployment Notes
 
-### 1. Install dependencies
+### Apache + WSGI
 
-```bash
-npm install
+The backend runs using `/var/www/pillpal/PILLPAL-Backend`
+Inside, Apache loads:
+
+* **WSGI script**
+* **Virtual environment**
+* **Flask app**
+
+### Domain + SSL
+
+* Domain purchased and configured in **AWS Route 53**
+* Certbot installed on EC2
+* Automatic HTTPS enforcement
+* All API requests encrypted end-to-end
+
+---
+
+#  Test Routes
+
+### Base Route
+
+```
+GET https://pillpal.space/api/health
 ```
 
-### 2. Configure `.env`
+Returns:
 
-See environment variable section above.
-
-### 3. Start the backend
-
-```bash
-npm start
+```json
+{ "status": "ok", "db": true }
 ```
 
-### 4. Test the server
-
-Visit:
+### Fetch Medications
 
 ```
-http://localhost:5000/
+GET /api/medications?user_id=1
+```
+
+### Create Medication
+
+```
+POST /api/medications
 ```
 
 ---
 
-## Test Routes (Base)
+#  Installation
 
+### Install dependencies
+
+```bash
+pip install -r requirements.txt
 ```
-GET /
-Response: { "message": "PillPal Backend API is running!" }
+
+### Restart Apache
+
+```bash
+sudo systemctl restart apache2
 ```
+
+---
+
+#  Current Status
+
+This backend currently supports:
+
+✓ User login + registration
+✓ Creating medications
+✓ Fetching medications
+✓ Fully connected MySQL schema
+✓ Full Android app integration
+✓ Python MQTT client
+✓ Apache + WSGI production server
+✓ SSL + HTTPS domain
+
+---
+
+# Coming in CA3
+
+* Full MQTT → DB adherence logging
+* Device pairing and status tracking
+* Complete CRUD for medications
+* Notifications + pill reminders
+* IoT → App real-time sync
+* JWT authentication upgrade
+* Security hardening & monitoring
+
+---
