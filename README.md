@@ -1,6 +1,5 @@
 # PillPal — Backend API
 
-![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=node.js&logoColor=white)
 ![Express](https://img.shields.io/badge/Express.js-000000?style=for-the-badge&logo=express&logoColor=white)
 ![MySQL](https://img.shields.io/badge/MySQL-4479A1?style=for-the-badge&logo=mysql&logoColor=white)
 ![MQTT](https://img.shields.io/badge/MQTT-660066?style=for-the-badge&logo=mqtt&logoColor=white)
@@ -87,7 +86,7 @@ device -> device_pairings -> user -> medications -> dose_instances -> dose_event
 
 ## System Architecture
 
-<img width="614" height="509" alt="SysArchitecture" src="https://github.com/user-attachments/assets/4d544017-16ed-4c65-b47c-aada8f05e7a6" />
+<img width="1493" height="890" alt="Screenshot 2025-11-23 234614" src="https://github.com/user-attachments/assets/6e9c734c-e0d3-4844-934e-40f809fead64" />
 
 ---
 
