@@ -122,8 +122,8 @@ The app uses **Retrofit + Gson** to parse backend responses.
 #  System Architecture
 
 
+<img width="1879" height="984" alt="image" src="https://github.com/user-attachments/assets/0a0a356d-b464-450e-b0f8-9823d332ab7d" />
 
-<img width="614" height="509" alt="SysArchitecture" src="https://github.com/user-attachments/assets/4d544017-16ed-4c65-b47c-aada8f05e7a6" />
 
 ---
 
