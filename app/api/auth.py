@@ -112,3 +112,29 @@ def get_profile():
     except Exception as e:
         print("Token decode error:", e)
         return jsonify({"error": "Invalid token"}), 401
+
+@auth_bp.route("/api/auth/delete", methods=["DELETE"])
+def delete_account():
+    token = request.headers.get("Authorization")
+    if not token:
+        return jsonify({"error": "Missing token"}), 401
+
+    try:
+        token = token.replace("Bearer ", "")
+        decoded = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        user_id = decoded["user_id"]
+
+        conn = get_db()
+        cur = conn.cursor()
+
+        cur.execute("DELETE FROM users WHERE user_id = %s", (user_id,))
+        conn.commit()
+
+        cur.close()
+        conn.close()
+
+        return jsonify({"status": "deleted"}), 200
+
+    except Exception as e:
+        print("Delete error:", e)
+        return jsonify({"error": "Invalid token"}), 401
