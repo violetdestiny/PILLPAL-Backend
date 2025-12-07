@@ -187,13 +187,18 @@ def get_history(user_id):
 
     cur.execute("""
         SELECT di.instance_id, di.scheduled_at, di.status,
-               m.med_id, m.name,
-               DATE(di.scheduled_at) as day
+            m.med_id, m.name,
+            DATE(di.scheduled_at) as day
         FROM dose_instances di
         JOIN medications m ON m.med_id = di.med_id
         WHERE m.user_id = %s
+        AND di.scheduled_at <= NOW()
         ORDER BY di.scheduled_at DESC
     """, (user_id,))
+
+
+
+
 
     rows = cur.fetchall()
 
@@ -215,6 +220,7 @@ def get_history(user_id):
     cur.close()
     conn.close()
     return jsonify(result)
+
 
 @med_bp.route("/api/calendar/day", methods=["GET"])
 @token_required
@@ -297,3 +303,105 @@ def update_dose(user_id):
     conn.commit()
 
     return jsonify({"status": status})
+
+@med_bp.route("/api/medications", methods=["POST"])
+@token_required
+def create_medication(user_id):
+    data = request.json
+
+    name = data.get("name")
+    notes = data.get("notes")
+    schedule = data.get("schedule", {})
+
+    repeat_type = schedule.get("repeat_type")  # daily / weekly / custom / once
+    day_mask = schedule.get("day_mask")        # string of 0/1 for weekly
+    times = schedule.get("times", [])          # list of "HH:MM"
+    custom_start = schedule.get("custom_start")
+    custom_end = schedule.get("custom_end")
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    # ------------------------------------------
+    # 1) INSERT MEDICATION
+    # ------------------------------------------
+    cur.execute("""
+        INSERT INTO medications (user_id, name, notes, start_date, end_date)
+        VALUES (%s, %s, %s, CURDATE(), NULL)
+    """, (user_id, name, notes))
+    
+    med_id = cur.lastrowid
+
+    # ------------------------------------------
+    # 2) INSERT SCHEDULE RULE
+    # ------------------------------------------
+    cur.execute("""
+        INSERT INTO med_schedule_rules (med_id, repeat_type, day_mask, lead_minutes)
+        VALUES (%s, %s, %s, %s)
+    """, (med_id, repeat_type, day_mask, 0))
+
+    rule_id = cur.lastrowid
+
+    # ------------------------------------------
+    # 3) INSERT MED TIMES
+    # ------------------------------------------
+    for idx, t in enumerate(times):
+        cur.execute("""
+            INSERT INTO med_times (rule_id, hhmm, sort_order)
+            VALUES (%s, %s, %s)
+        """, (rule_id, t, idx))
+
+    # ------------------------------------------
+    # 4) GENERATE DOSE INSTANCES (next 30 days)
+    # ------------------------------------------
+    import datetime
+    today = datetime.date.today()
+    days_to_generate = 30
+
+    def date_matches_weekly(date, mask):
+        # mask is "MTWTFSS" as 0/1 string, Monday-first
+        index = date.weekday()  # Monday=0
+        return mask[index] == "1"
+
+    for i in range(days_to_generate):
+        day = today + datetime.timedelta(days=i)
+
+        should_create = False
+
+        if repeat_type == "daily":
+            should_create = True
+
+        elif repeat_type == "weekly" and day_mask:
+            should_create = date_matches_weekly(day, day_mask)
+
+        elif repeat_type == "custom":
+            start = datetime.date.fromisoformat(custom_start)
+            end = datetime.date.fromisoformat(custom_end)
+            should_create = start <= day <= end
+
+        elif repeat_type == "once":
+            # only create for the given date in custom_start
+            once_date = datetime.date.fromisoformat(custom_start)
+            should_create = (day == once_date)
+
+        if not should_create:
+            continue
+
+        # For each scheduled time, create a dose instance
+        for t in times:
+            hour, minute = map(int, t.split(":"))
+            scheduled_at = datetime.datetime.combine(day, datetime.time(hour, minute))
+
+            cur.execute("""
+                INSERT INTO dose_instances (med_id, scheduled_at, status)
+                VALUES (%s, %s, 'upcoming')
+            """, (med_id, scheduled_at))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return jsonify({
+        "status": "success",
+        "med_id": med_id
+    }), 201
