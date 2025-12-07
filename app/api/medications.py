@@ -280,6 +280,7 @@ def mark_taken(user_id):
 
     return jsonify({"status": "taken"})
 
+
 @med_bp.route("/api/dose/update", methods=["POST"])
 @token_required
 def update_dose(user_id):
@@ -289,18 +290,25 @@ def update_dose(user_id):
     conn = get_db()
     cur = conn.cursor()
 
+    # UPDATE first (very fast)
     cur.execute("""
         UPDATE dose_instances
         SET status = %s
         WHERE instance_id = %s
     """, (status, instance_id))
 
-    cur.execute("""
-        INSERT INTO dose_events (instance_id, event_type, source)
-        VALUES (%s, %s, 'app')
-    """, (instance_id, "ack_" + status))
+    # EVENT insert separately, no lock conflict
+    try:
+        cur.execute("""
+            INSERT INTO dose_events (instance_id, event_type, source)
+            VALUES (%s, %s, 'app')
+        """, (instance_id, "ack_" + status))
+    except:
+        pass  # event insert is non-critical
 
     conn.commit()
+    cur.close()
+    conn.close()
 
     return jsonify({"status": status})
 
@@ -313,95 +321,218 @@ def create_medication(user_id):
     notes = data.get("notes")
     schedule = data.get("schedule", {})
 
-    repeat_type = schedule.get("repeat_type")  # daily / weekly / custom / once
-    day_mask = schedule.get("day_mask")        # string of 0/1 for weekly
-    times = schedule.get("times", [])          # list of "HH:MM"
+    repeat_type = schedule.get("repeat_type")      # daily / weekly / once / custom
+    day_mask = schedule.get("day_mask")            # 7-char mask for weekly
+    times = schedule.get("times", [])              # ["08:00", "20:00"]
     custom_start = schedule.get("custom_start")
     custom_end = schedule.get("custom_end")
 
     conn = get_db()
     cur = conn.cursor()
 
-    # ------------------------------------------
-    # 1) INSERT MEDICATION
-    # ------------------------------------------
+    # 1. Create medication
     cur.execute("""
         INSERT INTO medications (user_id, name, notes, start_date, end_date)
         VALUES (%s, %s, %s, CURDATE(), NULL)
     """, (user_id, name, notes))
-    
     med_id = cur.lastrowid
 
-    # ------------------------------------------
-    # 2) INSERT SCHEDULE RULE
-    # ------------------------------------------
+    # 2. Create schedule rule
     cur.execute("""
-        INSERT INTO med_schedule_rules (med_id, repeat_type, day_mask, lead_minutes)
-        VALUES (%s, %s, %s, %s)
-    """, (med_id, repeat_type, day_mask, 0))
-
+        INSERT INTO med_schedule_rules (med_id, repeat_type, day_mask, custom_start, custom_end)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (med_id, repeat_type, day_mask, custom_start, custom_end))
     rule_id = cur.lastrowid
 
-    # ------------------------------------------
-    # 3) INSERT MED TIMES
-    # ------------------------------------------
+    # 3. Add times
     for idx, t in enumerate(times):
         cur.execute("""
             INSERT INTO med_times (rule_id, hhmm, sort_order)
             VALUES (%s, %s, %s)
         """, (rule_id, t, idx))
 
-    # ------------------------------------------
-    # 4) GENERATE DOSE INSTANCES (next 30 days)
-    # ------------------------------------------
+    # 4. Generate dose instances for next 30 days
     import datetime
     today = datetime.date.today()
-    days_to_generate = 30
 
-    def date_matches_weekly(date, mask):
-        # mask is "MTWTFSS" as 0/1 string, Monday-first
-        index = date.weekday()  # Monday=0
-        return mask[index] == "1"
+    def weekly_match(day):
+        return day_mask and day_mask[day.weekday()] == "1"
 
-    for i in range(days_to_generate):
+    for i in range(30):
         day = today + datetime.timedelta(days=i)
+        should = False
 
+        if repeat_type == "daily":
+            should = True
+        elif repeat_type == "weekly":
+            should = weekly_match(day)
+        elif repeat_type == "once":
+            should = (custom_start == day.isoformat())
+        elif repeat_type == "custom":
+            start = datetime.date.fromisoformat(custom_start)
+            end = datetime.date.fromisoformat(custom_end)
+            should = (start <= day <= end)
+
+        if not should:
+            continue
+
+        for t in times:
+            hour, minute = map(int, t.split(":"))
+            dt = datetime.datetime.combine(day, datetime.time(hour, minute))
+            cur.execute("""
+                INSERT INTO dose_instances (med_id, scheduled_at, status)
+                VALUES (%s, %s, 'scheduled')
+            """, (med_id, dt))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return jsonify({"status": "created", "med_id": med_id}), 201
+
+
+
+@med_bp.route("/api/medications/<int:med_id>", methods=["PUT"])
+@token_required
+def update_medication(user_id, med_id):
+    data = request.json
+
+    name = data.get("name")
+    notes = data.get("notes")
+    schedule = data.get("schedule", {})
+
+    repeat_type = schedule.get("repeat_type")      # daily / weekly / once / custom
+    day_mask = schedule.get("day_mask")            # 7-char "0101000"
+    times = schedule.get("times", [])              # ["10:00", "15:00"]
+    custom_start = schedule.get("custom_start")
+    custom_end = schedule.get("custom_end")
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Validate that med belongs to this user
+    cur.execute("SELECT med_id FROM medications WHERE med_id = %s AND user_id = %s",
+                (med_id, user_id))
+    if not cur.fetchone():
+        return jsonify({"error": "Medication not found"}), 404
+
+    # Update medication table
+    cur.execute("""
+        UPDATE medications
+        SET name = %s, notes = %s
+        WHERE med_id = %s AND user_id = %s
+    """, (name, notes, med_id, user_id))
+
+    # Update schedule rule
+    cur.execute("""
+        UPDATE med_schedule_rules
+        SET repeat_type = %s,
+            day_mask = %s,
+            custom_start = %s,
+            custom_end = %s
+        WHERE med_id = %s
+    """, (repeat_type, day_mask, custom_start, custom_end, med_id))
+
+    # Get rule_id
+    cur.execute("SELECT rule_id FROM med_schedule_rules WHERE med_id = %s", (med_id,))
+    rule = cur.fetchone()
+    rule_id = rule[0]
+
+    # Replace med_times
+    cur.execute("DELETE FROM med_times WHERE rule_id = %s", (rule_id,))
+    for idx, t in enumerate(times):
+        cur.execute("""
+            INSERT INTO med_times (rule_id, hhmm, sort_order)
+            VALUES (%s, %s, %s)
+        """, (rule_id, t, idx))
+
+    # Regenerate future dose instances
+    cur.execute("""
+        DELETE FROM dose_events WHERE instance_id IN (
+            SELECT instance_id FROM dose_instances
+            WHERE med_id = %s AND scheduled_at >= NOW()
+        )
+    """, (med_id,))
+
+    cur.execute("""
+        DELETE FROM dose_instances
+        WHERE med_id = %s AND scheduled_at >= NOW()
+    """, (med_id,))
+
+    import datetime
+    today = datetime.date.today()
+
+    def matches_weekly(date, mask):
+        return mask[date.weekday()] == "1"
+
+    for i in range(30):
+        day = today + datetime.timedelta(days=i)
         should_create = False
 
         if repeat_type == "daily":
             should_create = True
-
         elif repeat_type == "weekly" and day_mask:
-            should_create = date_matches_weekly(day, day_mask)
-
-        elif repeat_type == "custom":
+            should_create = matches_weekly(day, day_mask)
+        elif repeat_type == "once" and custom_start:
+            should_create = (day.isoformat() == custom_start)
+        elif repeat_type == "custom" and custom_start and custom_end:
             start = datetime.date.fromisoformat(custom_start)
             end = datetime.date.fromisoformat(custom_end)
             should_create = start <= day <= end
 
-        elif repeat_type == "once":
-            # only create for the given date in custom_start
-            once_date = datetime.date.fromisoformat(custom_start)
-            should_create = (day == once_date)
-
         if not should_create:
             continue
 
-        # For each scheduled time, create a dose instance
         for t in times:
             hour, minute = map(int, t.split(":"))
             scheduled_at = datetime.datetime.combine(day, datetime.time(hour, minute))
-
             cur.execute("""
                 INSERT INTO dose_instances (med_id, scheduled_at, status)
-                VALUES (%s, %s, 'upcoming')
+                VALUES (%s, %s, 'scheduled')
             """, (med_id, scheduled_at))
 
     conn.commit()
     cur.close()
     conn.close()
 
-    return jsonify({
-        "status": "success",
-        "med_id": med_id
-    }), 201
+    return jsonify({"status": "updated"}), 200
+
+
+@med_bp.route("/api/medications/<int:med_id>", methods=["DELETE"])
+@token_required
+def delete_medication(user_id, med_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Remove dose events first
+    cur.execute("""
+        DELETE de FROM dose_events de
+        JOIN dose_instances di ON de.instance_id = di.instance_id
+        WHERE di.med_id = %s
+    """, (med_id,))
+
+    # Remove dose instances
+    cur.execute("DELETE FROM dose_instances WHERE med_id = %s", (med_id,))
+
+    # Remove med_times
+    cur.execute("""
+        DELETE FROM med_times
+        WHERE rule_id IN (SELECT rule_id FROM med_schedule_rules WHERE med_id = %s)
+    """, (med_id,))
+
+    # Remove schedule rules
+    cur.execute("DELETE FROM med_schedule_rules WHERE med_id = %s", (med_id,))
+
+    cur.execute("DELETE FROM compartment_assignments WHERE med_id = %s", (med_id,))
+
+    # Finally delete medication row
+    cur.execute(
+        "DELETE FROM medications WHERE med_id = %s AND user_id = %s",
+        (med_id, user_id)
+    )
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return jsonify({"status": "deleted"}), 200
