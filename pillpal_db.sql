@@ -252,26 +252,3 @@ START TRANSACTION;
     AND status IN ('scheduled','snoozed');
 COMMIT;
 
-
-/* 17/11/2025 - RUN THESE COMMANDS IN YOUR XAMPP*/
-
-USE pillpal_db;
-
-ALTER TABLE user_profiles
-DROP COLUMN username,
-DROP COLUMN timezone;
-
-/* and this is only for the hardcoded test users,
-all new users are going to get this automatically */
-INSERT INTO notification_settings (user_id) VALUES (1);
-INSERT INTO notification_settings (user_id) VALUES (2);
-
-/* 18/11/2025 - RUN THESE COMMANDS TOO*/
-
-ALTER TABLE users
-ADD COLUMN full_name VARCHAR(100) AFTER email,
-ADD COLUMN birthday DATE AFTER full_name;
-
-ALTER TABLE users
-DROP COLUMN nickname,
-DROP COLUMN date_joined;

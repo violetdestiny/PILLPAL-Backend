@@ -140,6 +140,57 @@ def get_medication_by_id(current_user, med_id):
         }
     }
 
+@med_bp.route("/api/medications", methods=["POST"])
+@token_required
+def create_medication(current_user):
+    user_id = current_user["user_id"]
+    data = request.json
+
+    name = data.get("name")
+    notes = data.get("notes")
+    start_date = data.get("start_date")
+    end_date = data.get("end_date")
+
+    times = data.get("times", [])
+    repeat_enabled = data.get("repeat_enabled", False)
+
+    repeat_type = data.get("repeat_type") if repeat_enabled else None
+    day_mask = data.get("day_mask") if repeat_enabled else None
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    #Insert medication
+    cur.execute("""
+        INSERT INTO medications (user_id, name, notes, start_date, end_date)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (user_id, name, notes, start_date, end_date))
+
+    med_id = cur.lastrowid
+
+    #Insert schedule rule
+    cur.execute("""
+        INSERT INTO med_schedule_rules (med_id, repeat_type, day_mask)
+        VALUES (%s, %s, %s)
+    """, (med_id, repeat_type, day_mask))
+
+    rule_id = cur.lastrowid
+
+    #Insert times
+    for idx, t in enumerate(times):
+        cur.execute("""
+            INSERT INTO med_times (rule_id, hhmm, sort_order)
+            VALUES (%s, %s, %s)
+        """, (rule_id, t, idx))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return jsonify({"message": "Medication created", "med_id": med_id}), 201
+
+
+
     cur.close()
     conn.close()
     return jsonify(result)

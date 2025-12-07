@@ -12,7 +12,7 @@ def get_db():
             user=os.getenv("DB_USER", "root"),
             password=os.getenv("DB_PASSWORD", ""),
             database=os.getenv("DB_NAME", "pillpal_db"),
-            port=os.getenv("DB_PORT", 3307) # Guys pls change this, my port is 3307 yours is 3306
+            port=os.getenv("DB_PORT", 3306) # Guys pls change this, my port is 3307 yours is 3306
         )
         return conn
     except Error as e:
