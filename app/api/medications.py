@@ -52,7 +52,7 @@ def get_medications(user_id):
     cur = conn.cursor(dictionary=True)
 
     cur.execute("""
-        SELECT med_id, name, notes, 
+        SELECT med_id, name, notes,
                start_date AS active_start_date,
                end_date AS active_end_date
         FROM medications
@@ -215,3 +215,85 @@ def get_history(user_id):
     cur.close()
     conn.close()
     return jsonify(result)
+
+@med_bp.route("/api/calendar/day", methods=["GET"])
+@token_required
+def get_day(user_id):
+    date = request.args.get("date")
+
+    conn = get_db()
+    cur = conn.cursor(dictionary=True)
+
+    cur.execute("""
+        SELECT di.instance_id, di.scheduled_at, di.status,
+               m.name
+        FROM dose_instances di
+        JOIN medications m ON m.med_id = di.med_id
+        WHERE m.user_id = %s
+          AND DATE(di.scheduled_at) = %s
+        ORDER BY di.scheduled_at ASC
+    """, (user_id, date))
+
+    rows = cur.fetchall()
+
+    result = []
+    for row in rows:
+        result.append({
+            "instance_id": row["instance_id"],
+            "name": row["name"],
+            "time": row["scheduled_at"].strftime("%H:%M"),
+            "status": row["status"]
+        })
+
+    return jsonify(result)
+
+
+@med_bp.route("/api/dose/mark_taken", methods=["POST"])
+@token_required
+def mark_taken(user_id):
+    instance_id = request.json.get("instance_id")
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    # add event
+    cur.execute("""
+        INSERT INTO dose_events (instance_id, event_type, source)
+        VALUES (%s, 'ack_taken', 'app')
+    """, (instance_id,))
+
+    # update dose
+    cur.execute("""
+        UPDATE dose_instances SET status = 'taken'
+        WHERE instance_id = %s
+    """, (instance_id,))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return jsonify({"status": "taken"})
+
+@med_bp.route("/api/dose/update", methods=["POST"])
+@token_required
+def update_dose(user_id):
+    instance_id = request.json.get("instance_id")
+    status = request.json.get("status")
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("""
+        UPDATE dose_instances
+        SET status = %s
+        WHERE instance_id = %s
+    """, (status, instance_id))
+
+    cur.execute("""
+        INSERT INTO dose_events (instance_id, event_type, source)
+        VALUES (%s, %s, 'app')
+    """, (instance_id, "ack_" + status))
+
+    conn.commit()
+
+    return jsonify({"status": status})
