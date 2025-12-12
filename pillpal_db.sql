@@ -9,6 +9,8 @@ CREATE TABLE users (
   user_id INT AUTO_INCREMENT PRIMARY KEY,
   email VARCHAR(255) NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
+  full_name VARCHAR(100),
+  birthday DATE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -139,11 +141,10 @@ CREATE TABLE device_state (
 
 /* SEED DATA */
 
-
-INSERT INTO users (email, password_hash)
+INSERT INTO users (email, password_hash, full_name, birthday)
 VALUES
-  ('maggie@example.com', '$2b$12$examplehashmaggie..............'),
-  ('maria@example.com', '$2b$12$examplehashmaria..............');
+  ('maggie@example.com', '$2b$12$examplehashmaggie..............', 'Margaret Lewis', '1953-05-14'),
+  ('maria@example.com', '$2b$12$examplehashmaria..............', 'Maria Hernandez', '1998-01-09');
 
 INSERT INTO user_profiles (user_id, full_name, username, timezone, birth_date)
 VALUES
@@ -192,86 +193,8 @@ VALUES
   (1, 'ack_taken', 'device', '{"note":"auto confirm yesterday AM"}'),
   (3, 'ack_taken', 'device', '{"note":"confirm today AM"}');
 
-INSERT INTO notification_settings (user_id, sound_enabled, vibration_enabled, led_enabled, lead_minutes_default, dyslexia_font)
-VALUES
-  (1, TRUE, TRUE, TRUE, 5, FALSE),
-  (2, TRUE, TRUE, TRUE, 10, TRUE);
+INSERT INTO notification_settings (user_id)
+VALUES (1), (2);
 
 INSERT INTO device_state (device_id, battery_percent, last_sync_at)
 VALUES (1, 77, NOW());
-
-
-/*  TEST QUERIES */
-
-/* 1. Missed doses in last 7 days */
-SELECT di.instance_id, m.name AS medication_name, di.scheduled_at
-FROM dose_instances di
-JOIN medications m ON m.med_id = di.med_id
-WHERE m.user_id = 1
-  AND di.status = 'missed'
-  AND di.scheduled_at >= (NOW() - INTERVAL 7 DAY)
-ORDER BY di.scheduled_at DESC;
-
-/* 2. Medications without active assignment */
-SELECT m.med_id, m.name
-FROM medications m
-LEFT JOIN compartment_assignments ca
-  ON ca.med_id = m.med_id
-  AND ca.removed_at IS NULL
-WHERE m.user_id = 1
-  AND ca.assignment_id IS NULL
-ORDER BY m.name;
-
-/* 3. Active device pairings */
-SELECT dp.pairing_id, dp.device_id, d.nickname, dp.paired_at
-FROM device_pairings dp
-JOIN devices d ON d.device_id = dp.device_id
-WHERE dp.user_id = 1
-  AND dp.active = TRUE
-ORDER BY dp.paired_at DESC;
-
-/* 4. Mark dose as taken */
-START TRANSACTION;
-  INSERT INTO dose_events (instance_id, event_type, source, meta)
-  VALUES (4, 'ack_taken', 'app', '{"app_version":"1.0.0"}');
-  UPDATE dose_instances
-  SET status = 'taken'
-  WHERE instance_id = 4
-    AND status IN ('scheduled','snoozed');
-COMMIT;
-
-/* 5. Snooze a scheduled dose by +10 minutes */
-START TRANSACTION;
-  INSERT INTO dose_events (instance_id, event_type, source, meta)
-  VALUES (4, 'snooze', 'app', '{"minutes":10}');
-  UPDATE dose_instances
-  SET status = 'snoozed',
-      scheduled_at = DATE_ADD(scheduled_at, INTERVAL 10 MINUTE),
-      created_source = 'app'
-  WHERE instance_id = 4
-    AND status IN ('scheduled','snoozed');
-COMMIT;
-
-
-/* 17/11/2025 - RUN THESE COMMANDS IN YOUR XAMPP*/
-
-USE pillpal_db;
-
-ALTER TABLE user_profiles
-DROP COLUMN username,
-DROP COLUMN timezone;
-
-/* and this is only for the hardcoded test users,
-all new users are going to get this automatically */
-INSERT INTO notification_settings (user_id) VALUES (1);
-INSERT INTO notification_settings (user_id) VALUES (2);
-
-/* 18/11/2025 - RUN THESE COMMANDS TOO*/
-
-ALTER TABLE users
-ADD COLUMN full_name VARCHAR(100) AFTER email,
-ADD COLUMN birthday DATE AFTER full_name;
-
-ALTER TABLE users
-DROP COLUMN nickname,
-DROP COLUMN date_joined;

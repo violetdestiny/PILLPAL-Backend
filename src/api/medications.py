@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify
-from ..db import get_db
+from src.db import get_db
 import jwt, datetime, os
 from functools import wraps
+import datetime
 
 med_bp = Blueprint("medications", __name__)
 JWT_SECRET = os.getenv("JWT_SECRET", "super_secret_key123")
@@ -304,7 +305,7 @@ def update_dose(user_id):
             VALUES (%s, %s, 'app')
         """, (instance_id, "ack_" + status))
     except:
-        pass  # event insert is non-critical
+        pass 
 
     conn.commit()
     cur.close()
@@ -321,37 +322,42 @@ def create_medication(user_id):
     notes = data.get("notes")
     schedule = data.get("schedule", {})
 
-    repeat_type = schedule.get("repeat_type")      # daily / weekly / once / custom
-    day_mask = schedule.get("day_mask")            # 7-char mask for weekly
-    times = schedule.get("times", [])              # ["08:00", "20:00"]
+    repeat_type = schedule.get("repeat_type")      
+    day_mask = schedule.get("day_mask")            
+    times = schedule.get("times", [])              
     custom_start = schedule.get("custom_start")
     custom_end = schedule.get("custom_end")
+
+    
+   
+    if repeat_type == "daily" and not day_mask:
+        day_mask = "1111111"
 
     conn = get_db()
     cur = conn.cursor()
 
-    # 1. Create medication
+   
     cur.execute("""
         INSERT INTO medications (user_id, name, notes, start_date, end_date)
         VALUES (%s, %s, %s, CURDATE(), NULL)
     """, (user_id, name, notes))
     med_id = cur.lastrowid
 
-    # 2. Create schedule rule
+   
     cur.execute("""
         INSERT INTO med_schedule_rules (med_id, repeat_type, day_mask, custom_start, custom_end)
         VALUES (%s, %s, %s, %s, %s)
     """, (med_id, repeat_type, day_mask, custom_start, custom_end))
     rule_id = cur.lastrowid
 
-    # 3. Add times
+   
     for idx, t in enumerate(times):
         cur.execute("""
             INSERT INTO med_times (rule_id, hhmm, sort_order)
             VALUES (%s, %s, %s)
         """, (rule_id, t, idx))
 
-    # 4. Generate dose instances for next 30 days
+    
     import datetime
     today = datetime.date.today()
 
@@ -378,7 +384,10 @@ def create_medication(user_id):
 
         for t in times:
             hour, minute = map(int, t.split(":"))
-            dt = datetime.datetime.combine(day, datetime.time(hour, minute))
+            dt = datetime.datetime.combine(
+    day,
+    datetime.time(hour, minute, tzinfo=datetime.timezone.utc)
+)
             cur.execute("""
                 INSERT INTO dose_instances (med_id, scheduled_at, status)
                 VALUES (%s, %s, 'scheduled')
@@ -392,6 +401,7 @@ def create_medication(user_id):
 
 
 
+
 @med_bp.route("/api/medications/<int:med_id>", methods=["PUT"])
 @token_required
 def update_medication(user_id, med_id):
@@ -401,44 +411,53 @@ def update_medication(user_id, med_id):
     notes = data.get("notes")
     schedule = data.get("schedule", {})
 
-    repeat_type = schedule.get("repeat_type")      # daily / weekly / once / custom
-    day_mask = schedule.get("day_mask")            # 7-char "0101000"
-    times = schedule.get("times", [])              # ["10:00", "15:00"]
+    repeat_type = schedule.get("repeat_type")
+    day_mask = schedule.get("day_mask")
+    times = schedule.get("times", [])
     custom_start = schedule.get("custom_start")
     custom_end = schedule.get("custom_end")
+
+ 
+    if repeat_type == "daily" and not day_mask:
+        day_mask = "1111111"
 
     conn = get_db()
     cur = conn.cursor()
 
-    # Validate that med belongs to this user
+    
     cur.execute("SELECT med_id FROM medications WHERE med_id = %s AND user_id = %s",
                 (med_id, user_id))
     if not cur.fetchone():
         return jsonify({"error": "Medication not found"}), 404
 
-    # Update medication table
+    
     cur.execute("""
         UPDATE medications
         SET name = %s, notes = %s
         WHERE med_id = %s AND user_id = %s
     """, (name, notes, med_id, user_id))
 
-    # Update schedule rule
-    cur.execute("""
-        UPDATE med_schedule_rules
-        SET repeat_type = %s,
-            day_mask = %s,
-            custom_start = %s,
-            custom_end = %s
-        WHERE med_id = %s
-    """, (repeat_type, day_mask, custom_start, custom_end, med_id))
-
-    # Get rule_id
+   
     cur.execute("SELECT rule_id FROM med_schedule_rules WHERE med_id = %s", (med_id,))
     rule = cur.fetchone()
-    rule_id = rule[0]
 
-    # Replace med_times
+    if rule is None:
+        cur.execute("""
+            INSERT INTO med_schedule_rules (med_id, repeat_type, day_mask, custom_start, custom_end)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (med_id, repeat_type, day_mask, custom_start, custom_end))
+        rule_id = cur.lastrowid
+    else:
+        rule_id = rule[0]
+        cur.execute("""
+            UPDATE med_schedule_rules
+            SET repeat_type = %s,
+                day_mask = %s,
+                custom_start = %s,
+                custom_end = %s
+            WHERE rule_id = %s
+        """, (repeat_type, day_mask, custom_start, custom_end, rule_id))
+
     cur.execute("DELETE FROM med_times WHERE rule_id = %s", (rule_id,))
     for idx, t in enumerate(times):
         cur.execute("""
@@ -446,7 +465,7 @@ def update_medication(user_id, med_id):
             VALUES (%s, %s, %s)
         """, (rule_id, t, idx))
 
-    # Regenerate future dose instances
+   
     cur.execute("""
         DELETE FROM dose_events WHERE instance_id IN (
             SELECT instance_id FROM dose_instances
@@ -485,7 +504,11 @@ def update_medication(user_id, med_id):
 
         for t in times:
             hour, minute = map(int, t.split(":"))
-            scheduled_at = datetime.datetime.combine(day, datetime.time(hour, minute))
+            scheduled_at = datetime.datetime.combine(
+    day,
+    datetime.time(hour, minute, tzinfo=datetime.timezone.utc)
+)
+
             cur.execute("""
                 INSERT INTO dose_instances (med_id, scheduled_at, status)
                 VALUES (%s, %s, 'scheduled')
