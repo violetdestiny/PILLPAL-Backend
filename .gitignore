@@ -20,3 +20,21 @@ Thumbs.db
 dist/
 build/
 .cache/
+
+
+/shelf/
+/workspace.xml
+
+/httpRequests/
+
+/dataSources/
+/dataSources.local.xml
+
+#venv
+venv/
+.env
+
+#other python files
+__pycache__/
+*.pyc
+
